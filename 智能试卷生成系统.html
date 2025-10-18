@@ -1,0 +1,1438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能试卷生成系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .question-card {
+            border-left: 4px solid #007bff;
+            margin-bottom: 1rem;
+        }
+        .question-type-badge {
+            position: absolute;
+            right: 15px;
+            top: 15px;
+        }
+        .chapter-section {
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        #previewArea, #examArea {
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 20px;
+            background: white;
+        }
+        .hidden {
+            display: none;
+        }
+        .choice-label {
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        .answer-input {
+            width: 200px;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .correct-answer {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .wrong-answer {
+            color: #dc3545;
+            text-decoration: line-through;
+        }
+        .user-answer {
+            background-color: #fff3cd;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        .question-result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .correct {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .incorrect {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        .score-display {
+            font-size: 2rem;
+            font-weight: bold;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        .course-badge {
+            font-size: 0.8rem;
+        }
+        .course-selector {
+            max-width: 300px;
+        }
+        .judge-answer-options, .choice-answer-options {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        .judge-option, .choice-option {
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+        .judge-option.selected, .choice-option.selected {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .choice-option.correct {
+            background-color: #28a745 !important;
+            color: white;
+            border-color: #28a745;
+        }
+        .answer-preview {
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .answer-correct {
+            color: #28a745;
+        }
+        .answer-wrong {
+            color: #dc3545;
+        }
+        .choice-input-group {
+            margin-bottom: 10px;
+        }
+        .choice-input-group .input-group-text {
+            min-width: 40px;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <h1 class="text-center mb-4">📚 智能试卷生成系统</h1>
+        
+        <!-- 课程选择 -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="input-group">
+                    <span class="input-group-text">当前课程</span>
+                    <select class="form-select course-selector" id="currentCourse">
+                        <option value="">-- 选择课程 --</option>
+                    </select>
+                    <button class="btn btn-outline-primary" type="button" onclick="showCourseManager()">管理课程</button>
+                </div>
+            </div>
+            <div class="col-md-6 text-end">
+                <button class="btn btn-outline-secondary" onclick="exportData()">💾 导出数据</button>
+                <button class="btn btn-outline-info" onclick="importData()">📥 导入数据</button>
+            </div>
+        </div>
+
+        <!-- 控制面板 -->
+        <div class="row mb-4" id="controlPanel" style="display: none;">
+            <div class="col-md-12">
+                <button class="btn btn-primary" onclick="showSection('manage')">📝 管理题目</button>
+                <button class="btn btn-success" onclick="showSection('generate')">🎯 生成试卷</button>
+                <button class="btn btn-info" onclick="showSection('exam')">📝 在线答题</button>
+                <span id="currentCourseDisplay" class="badge bg-secondary ms-2"></span>
+            </div>
+        </div>
+
+        <!-- 课程管理模态框 -->
+        <div class="modal fade" id="courseManagerModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">课程管理</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">新建课程</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="newCourseName" placeholder="输入课程名称">
+                                <button class="btn btn-success" onclick="addNewCourse()">添加</button>
+                            </div>
+                        </div>
+                        <hr>
+                        <h6>现有课程</h6>
+                        <div id="courseList">
+                            <!-- 课程列表将通过JavaScript动态加载 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 题目管理区域 -->
+        <div id="manageSection" class="hidden">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5>题目管理 - <span id="manageCourseName"></span></h5>
+                    <span class="badge bg-primary" id="questionCount">0题</span>
+                </div>
+                <div class="card-body">
+                    <form id="questionForm">
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">章节</label>
+                                <input type="text" class="form-control" id="chapter" placeholder="例如：第一章" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">题型</label>
+                                <select class="form-select" id="questionType" required>
+                                    <option value="">请选择</option>
+                                    <option value="填空">填空题</option>
+                                    <option value="判断">判断题</option>
+                                    <option value="选择">选择题</option>
+                                    <option value="简答">简答题</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">难度</label>
+                                <select class="form-select" id="difficulty">
+                                    <option value="简单">简单</option>
+                                    <option value="中等" selected>中等</option>
+                                    <option value="困难">困难</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">问题内容</label>
+                            <textarea class="form-control" id="questionText" rows="2" required></textarea>
+                        </div>
+                        
+                        <!-- 选择题选项 -->
+                        <div id="choiceFields" class="hidden">
+                            <div class="mb-3">
+                                <label class="form-label">选项内容</label>
+                                <div class="choice-inputs">
+                                    <div class="choice-input-group input-group mb-2">
+                                        <span class="input-group-text choice-label">A</span>
+                                        <input type="text" class="form-control" id="choiceA" placeholder="选项A内容" oninput="updateChoicePreview()">
+                                    </div>
+                                    <div class="choice-input-group input-group mb-2">
+                                        <span class="input-group-text choice-label">B</span>
+                                        <input type="text" class="form-control" id="choiceB" placeholder="选项B内容" oninput="updateChoicePreview()">
+                                    </div>
+                                    <div class="choice-input-group input-group mb-2">
+                                        <span class="input-group-text choice-label">C</span>
+                                        <input type="text" class="form-control" id="choiceC" placeholder="选项C内容" oninput="updateChoicePreview()">
+                                    </div>
+                                    <div class="choice-input-group input-group mb-2">
+                                        <span class="input-group-text choice-label">D</span>
+                                        <input type="text" class="form-control" id="choiceD" placeholder="选项D内容" oninput="updateChoicePreview()">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 选择题答案选择 -->
+                            <div class="mb-3">
+                                <label class="form-label">正确答案</label>
+                                <div class="choice-answer-options">
+                                    <div class="row text-center">
+                                        <div class="col-md-3 mb-2">
+                                            <div class="choice-option border rounded p-2" onclick="selectChoiceAnswer('A')" id="choiceOptionA">
+                                                <h6>A</h6>
+                                                <small id="choicePreviewA">选项A</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3 mb-2">
+                                            <div class="choice-option border rounded p-2" onclick="selectChoiceAnswer('B')" id="choiceOptionB">
+                                                <h6>B</h6>
+                                                <small id="choicePreviewB">选项B</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3 mb-2">
+                                            <div class="choice-option border rounded p-2" onclick="selectChoiceAnswer('C')" id="choiceOptionC">
+                                                <h6>C</h6>
+                                                <small id="choicePreviewC">选项C</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3 mb-2">
+                                            <div class="choice-option border rounded p-2" onclick="selectChoiceAnswer('D')" id="choiceOptionD">
+                                                <h6>D</h6>
+                                                <small id="choicePreviewD">选项D</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2 text-center">
+                                        <small class="text-muted">点击上方选择正确答案</small>
+                                        <div id="choiceAnswerPreview" class="answer-preview"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 判断题答案选择 -->
+                        <div id="judgeFields" class="hidden">
+                            <div class="mb-3">
+                                <label class="form-label">正确答案</label>
+                                <div class="judge-answer-options">
+                                    <div class="row text-center">
+                                        <div class="col-md-6">
+                                            <div class="judge-option border rounded p-3" onclick="selectJudgeAnswer('正确')" id="judgeCorrect">
+                                                <h5>✅ 正确</h5>
+                                                <small>这个说法是正确的</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="judge-option border rounded p-3" onclick="selectJudgeAnswer('错误')" id="judgeWrong">
+                                                <h5>❌ 错误</h5>
+                                                <small>这个说法是错误的</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2 text-center">
+                                        <small class="text-muted">点击上方选择正确答案</small>
+                                        <div id="judgeAnswerPreview" class="answer-preview"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 普通答案输入（用于填空、简答） -->
+                        <div id="normalAnswerFields">
+                            <div class="mb-3">
+                                <label class="form-label">答案</label>
+                                <input type="text" class="form-control" id="answer" required>
+                                <div class="form-text">
+                                    填空题：用下划线表示空白，如：______<br>
+                                    简答题：填写参考答案
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success">添加题目</button>
+                        <button type="button" class="btn btn-secondary" onclick="resetForm()">重置</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 题目列表 -->
+            <div class="mt-4">
+                <h5>题目库</h5>
+                <div id="questionBank">
+                    <!-- 题目将通过JavaScript动态加载 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 试卷生成区域 -->
+        <div id="generateSection" class="hidden">
+            <div class="card">
+                <div class="card-header">
+                    <h5>试卷配置 - <span id="generateCourseName"></span></h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">试卷名称</label>
+                            <input type="text" class="form-control" id="paperName" value="课程复习试卷">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">考察范围</label>
+                            <select class="form-select" id="chapterRange" multiple>
+                                <!-- 章节选项将通过JavaScript动态加载 -->
+                            </select>
+                            <div class="form-text">按住Ctrl可选择多个章节</div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label">填空题数量</label>
+                            <input type="number" class="form-control" id="fillCount" value="5" min="0">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">判断题数量</label>
+                            <input type="number" class="form-control" id="judgeCount" value="5" min="0">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">选择题数量</label>
+                            <input type="number" class="form-control" id="choiceCount" value="10" min="0">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">简答题数量</label>
+                            <input type="number" class="form-control" id="essayCount" value="2" min="0">
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="generatePaper()">生成试卷</button>
+                    <button class="btn btn-outline-success" onclick="exportPaper()">导出PDF</button>
+                    <button class="btn btn-info" onclick="startExam()">开始在线答题</button>
+                </div>
+            </div>
+
+            <!-- 试卷预览 -->
+            <div class="mt-4">
+                <h5>试卷预览</h5>
+                <div id="previewArea">
+                    <div id="paperContent">
+                        <p class="text-center text-muted">点击"生成试卷"按钮后，预览将显示在这里</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 在线答题区域 -->
+        <div id="examSection" class="hidden">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5>在线答题 - <span id="examCourseName"></span></h5>
+                    <div>
+                        <span id="examProgress" class="badge bg-primary">进度: 0/0</span>
+                        <button class="btn btn-success btn-sm ms-2" onclick="submitExam()">交卷</button>
+                        <button class="btn btn-secondary btn-sm ms-2" onclick="showSection('generate')">返回</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="progress mb-3">
+                        <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <div id="examArea">
+                        <div id="examContent">
+                            <p class="text-center text-muted">请先生成试卷，然后点击"开始在线答题"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 答题结果 -->
+            <div id="resultSection" class="hidden mt-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>答题结果 - <span id="resultCourseName"></span></h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="scoreDisplay" class="score-display"></div>
+                        <div id="resultDetails">
+                            <!-- 结果详情将通过JavaScript动态加载 -->
+                        </div>
+                        <div class="text-center mt-3">
+                            <button class="btn btn-primary" onclick="showSection('exam')">重新答题</button>
+                            <button class="btn btn-success" onclick="exportPaper()">导出试卷</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // 数据结构
+        let allCourses = JSON.parse(localStorage.getItem('allCourses')) || {
+            '语音课': { questions: [] },
+            '语法课': { questions: [] }
+        };
+        let currentCourse = '';
+        let currentEditingId = null;
+        let currentExam = null;
+        let userAnswers = {};
+        let selectedJudgeAnswer = '';
+        let selectedChoiceAnswer = '';
+
+        // 初始化课程选择
+        function initializeCourseSelector() {
+            const selector = document.getElementById('currentCourse');
+            selector.innerHTML = '<option value="">-- 选择课程 --</option>';
+            
+            Object.keys(allCourses).forEach(courseName => {
+                const option = document.createElement('option');
+                option.value = courseName;
+                option.textContent = courseName;
+                selector.appendChild(option);
+            });
+            
+            // 如果有默认课程，选择它
+            if (Object.keys(allCourses).length > 0 && !currentCourse) {
+                currentCourse = Object.keys(allCourses)[0];
+                selector.value = currentCourse;
+                updateUIForCourse();
+            }
+        }
+
+        // 课程选择变化
+        document.getElementById('currentCourse').addEventListener('change', function() {
+            currentCourse = this.value;
+            if (currentCourse) {
+                updateUIForCourse();
+            } else {
+                document.getElementById('controlPanel').style.display = 'none';
+            }
+        });
+
+        // 更新UI显示当前课程
+        function updateUIForCourse() {
+            document.getElementById('controlPanel').style.display = 'block';
+            document.getElementById('currentCourseDisplay').textContent = currentCourse;
+            document.getElementById('manageCourseName').textContent = currentCourse;
+            document.getElementById('generateCourseName').textContent = currentCourse;
+            document.getElementById('examCourseName').textContent = currentCourse;
+            document.getElementById('resultCourseName').textContent = currentCourse;
+            
+            // 更新题目计数
+            updateQuestionCount();
+            
+            // 如果当前在管理页面，重新渲染题目
+            if (!document.getElementById('manageSection').classList.contains('hidden')) {
+                renderQuestionBank();
+            }
+            
+            // 如果当前在生成页面，更新章节选项
+            if (!document.getElementById('generateSection').classList.contains('hidden')) {
+                updateChapterOptions();
+            }
+        }
+
+        // 更新题目计数
+        function updateQuestionCount() {
+            const count = allCourses[currentCourse]?.questions?.length || 0;
+            document.getElementById('questionCount').textContent = `${count}题`;
+        }
+
+        // 显示课程管理模态框
+        function showCourseManager() {
+            renderCourseList();
+            const modal = new bootstrap.Modal(document.getElementById('courseManagerModal'));
+            modal.show();
+        }
+
+        // 渲染课程列表
+        function renderCourseList() {
+            const courseList = document.getElementById('courseList');
+            courseList.innerHTML = '';
+            
+            Object.keys(allCourses).forEach(courseName => {
+                const courseItem = document.createElement('div');
+                courseItem.className = 'd-flex justify-content-between align-items-center p-2 border-bottom';
+                courseItem.innerHTML = `
+                    <div>
+                        <strong>${courseName}</strong>
+                        <span class="badge bg-secondary course-badge ms-2">${allCourses[courseName].questions.length}题</span>
+                    </div>
+                    <div>
+                        ${courseName !== currentCourse ? `
+                            <button class="btn btn-sm btn-outline-primary" onclick="switchCourse('${courseName}')">切换</button>
+                        ` : `
+                            <span class="badge bg-success">当前</span>
+                        `}
+                        ${Object.keys(allCourses).length > 1 ? `
+                            <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteCourse('${courseName}')">删除</button>
+                        ` : ''}
+                    </div>
+                `;
+                courseList.appendChild(courseItem);
+            });
+        }
+
+        // 添加新课程
+        function addNewCourse() {
+            const newCourseName = document.getElementById('newCourseName').value.trim();
+            if (!newCourseName) {
+                alert('请输入课程名称');
+                return;
+            }
+            
+            if (allCourses[newCourseName]) {
+                alert('课程已存在');
+                return;
+            }
+            
+            allCourses[newCourseName] = { questions: [] };
+            saveToLocalStorage();
+            initializeCourseSelector();
+            document.getElementById('newCourseName').value = '';
+            
+            // 切换到新课程
+            currentCourse = newCourseName;
+            document.getElementById('currentCourse').value = newCourseName;
+            updateUIForCourse();
+            
+            alert(`课程 "${newCourseName}" 创建成功！`);
+        }
+
+        // 切换课程
+        function switchCourse(courseName) {
+            currentCourse = courseName;
+            document.getElementById('currentCourse').value = courseName;
+            updateUIForCourse();
+            const modal = bootstrap.Modal.getInstance(document.getElementById('courseManagerModal'));
+            modal.hide();
+        }
+
+        // 删除课程
+        function deleteCourse(courseName) {
+            if (!confirm(`确定要删除课程 "${courseName}" 吗？此操作无法撤销！`)) {
+                return;
+            }
+            
+            delete allCourses[courseName];
+            saveToLocalStorage();
+            
+            if (currentCourse === courseName) {
+                // 如果删除的是当前课程，切换到第一个可用课程
+                const remainingCourses = Object.keys(allCourses);
+                currentCourse = remainingCourses.length > 0 ? remainingCourses[0] : '';
+            }
+            
+            initializeCourseSelector();
+            if (currentCourse) {
+                updateUIForCourse();
+            } else {
+                document.getElementById('controlPanel').style.display = 'none';
+            }
+            
+            renderCourseList();
+        }
+
+        // 显示/隐藏区域
+        function showSection(section) {
+            if (!currentCourse) {
+                alert('请先选择课程');
+                return;
+            }
+            
+            document.getElementById('manageSection').classList.add('hidden');
+            document.getElementById('generateSection').classList.add('hidden');
+            document.getElementById('examSection').classList.add('hidden');
+            document.getElementById(section + 'Section').classList.remove('hidden');
+            
+            if (section === 'generate') {
+                updateChapterOptions();
+            }
+            if (section === 'exam') {
+                document.getElementById('resultSection').classList.add('hidden');
+                document.getElementById('examContent').classList.remove('hidden');
+            }
+            if (section === 'manage') {
+                renderQuestionBank();
+            }
+        }
+
+        // 获取当前课程的题目库
+        function getCurrentQuestionBank() {
+            return allCourses[currentCourse]?.questions || [];
+        }
+
+        // 设置当前课程的题目库
+        function setCurrentQuestionBank(questions) {
+            if (!allCourses[currentCourse]) {
+                allCourses[currentCourse] = { questions: [] };
+            }
+            allCourses[currentCourse].questions = questions;
+            saveToLocalStorage();
+        }
+
+        // 题型变化时显示/隐藏选项字段
+        document.getElementById('questionType').addEventListener('change', function() {
+            const choiceFields = document.getElementById('choiceFields');
+            const judgeFields = document.getElementById('judgeFields');
+            const normalAnswerFields = document.getElementById('normalAnswerFields');
+            
+            // 隐藏所有特殊字段
+            choiceFields.classList.add('hidden');
+            judgeFields.classList.add('hidden');
+            normalAnswerFields.classList.remove('hidden');
+            
+            // 根据题型显示对应的字段
+            if (this.value === '选择') {
+                choiceFields.classList.remove('hidden');
+                normalAnswerFields.classList.add('hidden');
+                updateChoicePreview(); // 初始化选项预览
+            } else if (this.value === '判断') {
+                judgeFields.classList.remove('hidden');
+                normalAnswerFields.classList.add('hidden');
+            }
+            
+            // 重置选择
+            if (this.value !== '判断') {
+                resetJudgeSelection();
+            }
+            if (this.value !== '选择') {
+                resetChoiceSelection();
+            }
+        });
+
+        // 更新选择题选项预览
+        function updateChoicePreview() {
+            const choiceA = document.getElementById('choiceA').value || '选项A';
+            const choiceB = document.getElementById('choiceB').value || '选项B';
+            const choiceC = document.getElementById('choiceC').value || '选项C';
+            const choiceD = document.getElementById('choiceD').value || '选项D';
+            
+            document.getElementById('choicePreviewA').textContent = choiceA;
+            document.getElementById('choicePreviewB').textContent = choiceB;
+            document.getElementById('choicePreviewC').textContent = choiceC;
+            document.getElementById('choicePreviewD').textContent = choiceD;
+        }
+
+        // 选择判断题答案
+        function selectJudgeAnswer(answer) {
+            selectedJudgeAnswer = answer;
+            
+            // 更新UI显示
+            document.getElementById('judgeCorrect').classList.remove('selected');
+            document.getElementById('judgeWrong').classList.remove('selected');
+            
+            if (answer === '正确') {
+                document.getElementById('judgeCorrect').classList.add('selected');
+                document.getElementById('judgeAnswerPreview').innerHTML = '<span class="answer-correct">✅ 正确答案：正确</span>';
+            } else {
+                document.getElementById('judgeWrong').classList.add('selected');
+                document.getElementById('judgeAnswerPreview').innerHTML = '<span class="answer-wrong">❌ 正确答案：错误</span>';
+            }
+        }
+
+        // 选择选择题答案
+        function selectChoiceAnswer(answer) {
+            selectedChoiceAnswer = answer;
+            
+            // 更新UI显示
+            document.getElementById('choiceOptionA').classList.remove('selected', 'correct');
+            document.getElementById('choiceOptionB').classList.remove('selected', 'correct');
+            document.getElementById('choiceOptionC').classList.remove('selected', 'correct');
+            document.getElementById('choiceOptionD').classList.remove('selected', 'correct');
+            
+            // 设置选中状态和正确答案样式
+            document.getElementById('choiceOption' + answer).classList.add('selected', 'correct');
+            
+            document.getElementById('choiceAnswerPreview').innerHTML = `<span class="answer-correct">✅ 正确答案：${answer}</span>`;
+        }
+
+        // 重置判断题选择
+        function resetJudgeSelection() {
+            selectedJudgeAnswer = '';
+            document.getElementById('judgeCorrect').classList.remove('selected');
+            document.getElementById('judgeWrong').classList.remove('selected');
+            document.getElementById('judgeAnswerPreview').innerHTML = '';
+        }
+
+        // 重置选择题选择
+        function resetChoiceSelection() {
+            selectedChoiceAnswer = '';
+            document.getElementById('choiceOptionA').classList.remove('selected', 'correct');
+            document.getElementById('choiceOptionB').classList.remove('selected', 'correct');
+            document.getElementById('choiceOptionC').classList.remove('selected', 'correct');
+            document.getElementById('choiceOptionD').classList.remove('selected', 'correct');
+            document.getElementById('choiceAnswerPreview').innerHTML = '';
+        }
+
+        // 重置表单
+        function resetForm() {
+            document.getElementById('questionForm').reset();
+            document.getElementById('choiceFields').classList.add('hidden');
+            document.getElementById('judgeFields').classList.add('hidden');
+            document.getElementById('normalAnswerFields').classList.remove('hidden');
+            currentEditingId = null;
+            selectedJudgeAnswer = '';
+            selectedChoiceAnswer = '';
+            resetJudgeSelection();
+            resetChoiceSelection();
+            document.querySelector('button[type="submit"]').textContent = '添加题目';
+        }
+
+        // 添加题目
+        document.getElementById('questionForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const questionType = document.getElementById('questionType').value;
+            let choices = [];
+            let answer = '';
+            
+            // 处理不同题型的答案
+            if (questionType === '选择') {
+                choices = [
+                    `A. ${document.getElementById('choiceA').value || ''}`,
+                    `B. ${document.getElementById('choiceB').value || ''}`,
+                    `C. ${document.getElementById('choiceC').value || ''}`,
+                    `D. ${document.getElementById('choiceD').value || ''}`
+                ].filter(choice => choice.length > 2); // 过滤空选项
+                
+                if (!selectedChoiceAnswer) {
+                    alert('请选择选择题的正确答案');
+                    return;
+                }
+                answer = selectedChoiceAnswer;
+            } else if (questionType === '判断') {
+                if (!selectedJudgeAnswer) {
+                    alert('请选择判断题的正确答案');
+                    return;
+                }
+                answer = selectedJudgeAnswer;
+            } else {
+                answer = document.getElementById('answer').value;
+            }
+            
+            const question = {
+                id: currentEditingId || Date.now(),
+                chapter: document.getElementById('chapter').value,
+                type: questionType,
+                difficulty: document.getElementById('difficulty').value,
+                text: document.getElementById('questionText').value,
+                answer: answer,
+                choices: choices
+            };
+            
+            const questionBank = getCurrentQuestionBank();
+            
+            if (currentEditingId) {
+                // 更新现有题目
+                const index = questionBank.findIndex(q => q.id === currentEditingId);
+                questionBank[index] = question;
+                currentEditingId = null;
+                document.querySelector('button[type="submit"]').textContent = '添加题目';
+            } else {
+                // 添加新题目
+                questionBank.push(question);
+            }
+            
+            setCurrentQuestionBank(questionBank);
+            renderQuestionBank();
+            resetForm();
+            updateQuestionCount();
+        });
+
+        // 渲染题目库
+        function renderQuestionBank() {
+            const bankElement = document.getElementById('questionBank');
+            const questionBank = getCurrentQuestionBank();
+            const chapters = [...new Set(questionBank.map(q => q.chapter))];
+            
+            bankElement.innerHTML = '';
+            
+            if (questionBank.length === 0) {
+                bankElement.innerHTML = '<div class="alert alert-info">暂无题目，请添加题目开始使用。</div>';
+                return;
+            }
+            
+            chapters.forEach(chapter => {
+                const chapterQuestions = questionBank.filter(q => q.chapter === chapter);
+                
+                const chapterSection = document.createElement('div');
+                chapterSection.className = 'chapter-section';
+                chapterSection.innerHTML = `<h6>${chapter} <span class="badge bg-secondary">${chapterQuestions.length}题</span></h6>`;
+                
+                chapterQuestions.forEach((question, index) => {
+                    const questionCard = document.createElement('div');
+                    questionCard.className = 'card question-card';
+                    
+                    // 判断题答案显示样式
+                    let answerDisplay = question.answer;
+                    if (question.type === '判断') {
+                        if (question.answer === '正确') {
+                            answerDisplay = '<span class="answer-correct">✅ 正确</span>';
+                        } else {
+                            answerDisplay = '<span class="answer-wrong">❌ 错误</span>';
+                        }
+                    } else if (question.type === '选择') {
+                        answerDisplay = `<span class="answer-correct">${question.answer}</span>`;
+                    }
+                    
+                    questionCard.innerHTML = `
+                        <div class="card-body">
+                            <span class="badge question-type-badge ${getTypeColor(question.type)}">${question.type}</span>
+                            <span class="badge bg-dark ms-1">${question.difficulty}</span>
+                            <h6 class="card-title">${index + 1}. ${question.text}</h6>
+                            ${question.type === '选择' && question.choices.length > 0 ? 
+                                `<div class="text-muted small mt-2">${question.choices.join('<br>')}</div>` : ''}
+                            <p class="card-text mt-2"><strong>答案：</strong>${answerDisplay}</p>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-warning" onclick="editQuestion(${question.id})">编辑</button>
+                                <button class="btn btn-outline-danger" onclick="deleteQuestion(${question.id})">删除</button>
+                            </div>
+                        </div>
+                    `;
+                    chapterSection.appendChild(questionCard);
+                });
+                
+                bankElement.appendChild(chapterSection);
+            });
+        }
+
+        // 编辑题目
+        function editQuestion(id) {
+            const questionBank = getCurrentQuestionBank();
+            const question = questionBank.find(q => q.id === id);
+            if (!question) return;
+            
+            document.getElementById('chapter').value = question.chapter;
+            document.getElementById('questionType').value = question.type;
+            document.getElementById('difficulty').value = question.difficulty;
+            document.getElementById('questionText').value = question.text;
+            
+            if (question.type === '选择') {
+                // 解析选项内容
+                question.choices.forEach(choice => {
+                    const match = choice.match(/^([A-D])\.\s*(.+)$/);
+                    if (match) {
+                        const letter = match[1];
+                        const content = match[2];
+                        document.getElementById(`choice${letter}`).value = content;
+                    }
+                });
+                selectChoiceAnswer(question.answer);
+                document.getElementById('choiceFields').classList.remove('hidden');
+                document.getElementById('judgeFields').classList.add('hidden');
+                document.getElementById('normalAnswerFields').classList.add('hidden');
+                updateChoicePreview();
+            } else if (question.type === '判断') {
+                selectJudgeAnswer(question.answer);
+                document.getElementById('choiceFields').classList.add('hidden');
+                document.getElementById('judgeFields').classList.remove('hidden');
+                document.getElementById('normalAnswerFields').classList.add('hidden');
+            } else {
+                document.getElementById('answer').value = question.answer;
+                document.getElementById('choiceFields').classList.add('hidden');
+                document.getElementById('judgeFields').classList.add('hidden');
+                document.getElementById('normalAnswerFields').classList.remove('hidden');
+            }
+            
+            currentEditingId = id;
+            document.querySelector('button[type="submit"]').textContent = '更新题目';
+            document.getElementById('manageSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 删除题目
+        function deleteQuestion(id) {
+            if (confirm('确定要删除这个题目吗？')) {
+                const questionBank = getCurrentQuestionBank();
+                const newQuestionBank = questionBank.filter(q => q.id !== id);
+                setCurrentQuestionBank(newQuestionBank);
+                renderQuestionBank();
+                updateQuestionCount();
+            }
+        }
+
+        // 生成试卷
+        function generatePaper() {
+            const selectedChapters = Array.from(document.getElementById('chapterRange').selectedOptions)
+                .map(opt => opt.value);
+            
+            const config = {
+                courseName: document.getElementById('paperName').value,
+                chapters: selectedChapters,
+                fillCount: parseInt(document.getElementById('fillCount').value),
+                judgeCount: parseInt(document.getElementById('judgeCount').value),
+                choiceCount: parseInt(document.getElementById('choiceCount').value),
+                essayCount: parseInt(document.getElementById('essayCount').value)
+            };
+            
+            currentExam = createPaper(config);
+            displayPaper(currentExam);
+        }
+
+        // 创建试卷内容
+        function createPaper(config) {
+            let filteredQuestions = getCurrentQuestionBank();
+            if (config.chapters.length > 0) {
+                filteredQuestions = filteredQuestions.filter(q => config.chapters.includes(q.chapter));
+            }
+            
+            // 按题型分组并随机选择
+            const fillQuestions = shuffle(filteredQuestions.filter(q => q.type === '填空')).slice(0, config.fillCount);
+            const judgeQuestions = shuffle(filteredQuestions.filter(q => q.type === '判断')).slice(0, config.judgeCount);
+            const choiceQuestions = shuffle(filteredQuestions.filter(q => q.type === '选择')).slice(0, config.choiceCount);
+            const essayQuestions = shuffle(filteredQuestions.filter(q => q.type === '简答')).slice(0, config.essayCount);
+            
+            // 为所有题目添加唯一ID
+            let questionId = 1;
+            const addIds = (questions) => questions.map(q => ({ ...q, examId: questionId++ }));
+            
+            return {
+                title: config.courseName,
+                course: currentCourse,
+                fillQuestions: addIds(fillQuestions),
+                judgeQuestions: addIds(judgeQuestions),
+                choiceQuestions: addIds(choiceQuestions),
+                essayQuestions: addIds(essayQuestions)
+            };
+        }
+
+        // 显示试卷
+        function displayPaper(paper) {
+            const content = document.getElementById('paperContent');
+            let html = `
+                <div class="text-center mb-4">
+                    <h3>${paper.title}</h3>
+                    <p class="text-muted">课程：${paper.course}</p>
+                    <hr>
+                    <div class="row text-start">
+                        <div class="col">姓名：__________</div>
+                        <div class="col">班级：__________</div>
+                        <div class="col">学号：__________</div>
+                        <div class="col">分数：__________</div>
+                    </div>
+                </div>
+            `;
+            
+            let questionNumber = 1;
+            
+            // 填空题
+            if (paper.fillQuestions.length > 0) {
+                html += `<h5>一、填空题（每题2分，共${paper.fillQuestions.length * 2}分）</h5>`;
+                paper.fillQuestions.forEach((q, i) => {
+                    html += `<p>${questionNumber++}. ${q.text}</p>`;
+                });
+                html += `<br>`;
+            }
+            
+            // 判断题
+            if (paper.judgeQuestions.length > 0) {
+                html += `<h5>二、判断题（每题1分，共${paper.judgeQuestions.length}分）</h5>`;
+                html += `<p>请判断以下说法的正误，正确的打"√"，错误的打"×"：</p>`;
+                paper.judgeQuestions.forEach((q, i) => {
+                    html += `<p>${questionNumber++}. ${q.text} （ ）</p>`;
+                });
+                html += `<br>`;
+            }
+            
+            // 选择题
+            if (paper.choiceQuestions.length > 0) {
+                html += `<h5>三、选择题（每题2分，共${paper.choiceQuestions.length * 2}分）</h5>`;
+                html += `<p>请选择最合适的答案：</p>`;
+                paper.choiceQuestions.forEach((q, i) => {
+                    html += `<p>${questionNumber++}. ${q.text}</p>`;
+                    q.choices.forEach(choice => {
+                        html += `<div style="margin-left: 20px;">${choice}</div>`;
+                    });
+                    html += `<br>`;
+                });
+            }
+            
+            // 简答题
+            if (paper.essayQuestions.length > 0) {
+                html += `<h5>四、简答题（每题10分，共${paper.essayQuestions.length * 10}分）</h5>`;
+                paper.essayQuestions.forEach((q, i) => {
+                    html += `<p>${questionNumber++}. ${q.text}</p>`;
+                    html += `<div style="height: 120px; border-bottom: 1px solid #ccc; margin: 10px 0;"></div>`;
+                });
+            }
+            
+            content.innerHTML = html;
+        }
+
+        // 开始在线答题
+        function startExam() {
+            if (!currentExam) {
+                alert('请先生成试卷！');
+                return;
+            }
+            
+            userAnswers = {};
+            showSection('exam');
+            displayExam();
+        }
+
+        // 显示在线答题界面
+        function displayExam() {
+            const examContent = document.getElementById('examContent');
+            let html = `
+                <div class="text-center mb-4">
+                    <h3>${currentExam.title}</h3>
+                    <p class="text-muted">课程：${currentExam.course}</p>
+                    <div class="alert alert-info">
+                        <strong>答题说明：</strong>请认真作答，完成后点击"交卷"按钮查看成绩。
+                    </div>
+                </div>
+            `;
+            
+            let questionNumber = 1;
+            
+            // 填空题
+            if (currentExam.fillQuestions.length > 0) {
+                html += `<h5>一、填空题（每题2分，共${currentExam.fillQuestions.length * 2}分）</h5>`;
+                currentExam.fillQuestions.forEach((q, i) => {
+                    html += `
+                        <div class="mb-3">
+                            <p>${questionNumber}. ${q.text.replace('______', '<input type="text" class="form-control answer-input" id="answer_' + q.examId + '" placeholder="请输入答案">')}</p>
+                        </div>
+                    `;
+                    questionNumber++;
+                });
+            }
+            
+            // 判断题
+            if (currentExam.judgeQuestions.length > 0) {
+                html += `<h5 class="mt-4">二、判断题（每题1分，共${currentExam.judgeQuestions.length}分）</h5>`;
+                currentExam.judgeQuestions.forEach((q, i) => {
+                    html += `
+                        <div class="mb-3">
+                            <p>${questionNumber}. ${q.text}</p>
+                            <div>
+                                <input type="radio" name="judge_${q.examId}" id="judge_${q.examId}_true" value="正确">
+                                <label for="judge_${q.examId}_true" class="me-3">正确</label>
+                                <input type="radio" name="judge_${q.examId}" id="judge_${q.examId}_false" value="错误">
+                                <label for="judge_${q.examId}_false">错误</label>
+                            </div>
+                        </div>
+                    `;
+                    questionNumber++;
+                });
+            }
+            
+            // 选择题
+            if (currentExam.choiceQuestions.length > 0) {
+                html += `<h5 class="mt-4">三、选择题（每题2分，共${currentExam.choiceQuestions.length * 2}分）</h5>`;
+                currentExam.choiceQuestions.forEach((q, i) => {
+                    html += `
+                        <div class="mb-3">
+                            <p>${questionNumber}. ${q.text}</p>
+                            <div>
+                    `;
+                    q.choices.forEach(choice => {
+                        const letter = choice.split('.')[0];
+                        html += `
+                            <div>
+                                <input type="radio" name="choice_${q.examId}" id="choice_${q.examId}_${letter}" value="${letter}">
+                                <label for="choice_${q.examId}_${letter}">${choice}</label>
+                            </div>
+                        `;
+                    });
+                    html += `</div></div>`;
+                    questionNumber++;
+                });
+            }
+            
+            // 简答题
+            if (currentExam.essayQuestions.length > 0) {
+                html += `<h5 class="mt-4">四、简答题（每题10分，共${currentExam.essayQuestions.length * 10}分）</h5>`;
+                currentExam.essayQuestions.forEach((q, i) => {
+                    html += `
+                        <div class="mb-3">
+                            <p>${questionNumber}. ${q.text}</p>
+                            <textarea class="form-control" id="essay_${q.examId}" rows="4" placeholder="请输入您的答案"></textarea>
+                        </div>
+                    `;
+                    questionNumber++;
+                });
+            }
+            
+            examContent.innerHTML = html;
+            updateProgress();
+        }
+
+        // 更新进度
+        function updateProgress() {
+            if (!currentExam) return;
+            
+            const totalQuestions = currentExam.fillQuestions.length + currentExam.judgeQuestions.length + 
+                                 currentExam.choiceQuestions.length + currentExam.essayQuestions.length;
+            const answered = Object.keys(userAnswers).length;
+            const progress = totalQuestions > 0 ? (answered / totalQuestions) * 100 : 0;
+            
+            document.getElementById('examProgress').textContent = `进度: ${answered}/${totalQuestions}`;
+            document.getElementById('progressBar').style.width = `${progress}%`;
+        }
+
+        // 收集答案
+        function collectAnswers() {
+            userAnswers = {};
+            
+            // 收集填空题答案
+            currentExam.fillQuestions.forEach(q => {
+                const input = document.getElementById(`answer_${q.examId}`);
+                if (input) userAnswers[q.examId] = input.value.trim();
+            });
+            
+            // 收集判断题答案
+            currentExam.judgeQuestions.forEach(q => {
+                const selected = document.querySelector(`input[name="judge_${q.examId}"]:checked`);
+                if (selected) userAnswers[q.examId] = selected.value;
+            });
+            
+            // 收集选择题答案
+            currentExam.choiceQuestions.forEach(q => {
+                const selected = document.querySelector(`input[name="choice_${q.examId}"]:checked`);
+                if (selected) userAnswers[q.examId] = selected.value;
+            });
+            
+            // 收集简答题答案
+            currentExam.essayQuestions.forEach(q => {
+                const textarea = document.getElementById(`essay_${q.examId}`);
+                if (textarea) userAnswers[q.examId] = textarea.value.trim();
+            });
+            
+            updateProgress();
+        }
+
+        // 交卷
+        function submitExam() {
+            collectAnswers();
+            
+            const totalQuestions = currentExam.fillQuestions.length + currentExam.judgeQuestions.length + 
+                                 currentExam.choiceQuestions.length + currentExam.essayQuestions.length;
+            const answered = Object.keys(userAnswers).length;
+            
+            if (answered < totalQuestions && !confirm(`您还有${totalQuestions - answered}道题未作答，确定要交卷吗？`)) {
+                return;
+            }
+            
+            showResults();
+        }
+
+        // 显示结果
+        function showResults() {
+            const results = gradeExam();
+            displayResults(results);
+            document.getElementById('examContent').classList.add('hidden');
+            document.getElementById('resultSection').classList.remove('hidden');
+        }
+
+        // 批改试卷
+        function gradeExam() {
+            const results = {
+                score: 0,
+                total: 0,
+                details: []
+            };
+            
+            // 批改填空题（每题2分）
+            currentExam.fillQuestions.forEach(q => {
+                const userAnswer = userAnswers[q.examId] || '未作答';
+                const isCorrect = userAnswer.toLowerCase() === q.answer.toLowerCase();
+                if (isCorrect) results.score += 2;
+                results.total += 2;
+                results.details.push({
+                    question: q.text,
+                    type: '填空',
+                    userAnswer,
+                    correctAnswer: q.answer,
+                    isCorrect,
+                    score: isCorrect ? 2 : 0
+                });
+            });
+            
+            // 批改判断题（每题1分）
+            currentExam.judgeQuestions.forEach(q => {
+                const userAnswer = userAnswers[q.examId] || '未作答';
+                const isCorrect = userAnswer === q.answer;
+                if (isCorrect) results.score += 1;
+                results.total += 1;
+                results.details.push({
+                    question: q.text,
+                    type: '判断',
+                    userAnswer,
+                    correctAnswer: q.answer,
+                    isCorrect,
+                    score: isCorrect ? 1 : 0
+                });
+            });
+            
+            // 批改选择题（每题2分）
+            currentExam.choiceQuestions.forEach(q => {
+                const userAnswer = userAnswers[q.examId] || '未作答';
+                const isCorrect = userAnswer.toUpperCase() === q.answer.toUpperCase();
+                if (isCorrect) results.score += 2;
+                results.total += 2;
+                results.details.push({
+                    question: q.text,
+                    type: '选择',
+                    userAnswer,
+                    correctAnswer: q.answer,
+                    isCorrect,
+                    score: isCorrect ? 2 : 0
+                });
+            });
+            
+            // 简答题（每题10分，需要手动批改）
+            currentExam.essayQuestions.forEach(q => {
+                const userAnswer = userAnswers[q.examId] || '未作答';
+                results.total += 10;
+                results.details.push({
+                    question: q.text,
+                    type: '简答',
+                    userAnswer,
+                    correctAnswer: q.answer,
+                    isCorrect: null, // 需要手动批改
+                    score: 0
+                });
+            });
+            
+            return results;
+        }
+
+        // 显示批改结果
+        function displayResults(results) {
+            const scoreDisplay = document.getElementById('scoreDisplay');
+            const resultDetails = document.getElementById('resultDetails');
+            
+            // 显示总分
+            const percentage = (results.score / results.total * 100).toFixed(1);
+            scoreDisplay.innerHTML = `
+                <div class="text-${percentage >= 60 ? 'success' : 'danger'}">
+                    得分: ${results.score} / ${results.total} (${percentage}%)
+                </div>
+            `;
+            
+            // 显示详细结果
+            let detailsHtml = '<h6>详细结果:</h6>';
+            results.details.forEach((detail, index) => {
+                const badgeClass = detail.isCorrect === true ? 'bg-success' : 
+                                 detail.isCorrect === false ? 'bg-danger' : 'bg-warning';
+                const badgeText = detail.isCorrect === true ? '正确' : 
+                                detail.isCorrect === false ? '错误' : '待批改';
+                
+                // 判断题答案显示样式
+                let correctAnswerDisplay = detail.correctAnswer;
+                if (detail.type === '判断') {
+                    if (detail.correctAnswer === '正确') {
+                        correctAnswerDisplay = '<span class="answer-correct">✅ 正确</span>';
+                    } else {
+                        correctAnswerDisplay = '<span class="answer-wrong">❌ 错误</span>';
+                    }
+                } else if (detail.type === '选择') {
+                    correctAnswerDisplay = `<span class="answer-correct">${detail.correctAnswer}</span>`;
+                }
+                
+                detailsHtml += `
+                    <div class="question-result ${detail.isCorrect ? 'correct' : 'incorrect'}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong>第${index + 1}题 (${detail.type})</strong>
+                                <span class="badge ${badgeClass} ms-2">${badgeText}</span>
+                                <span class="badge bg-info ms-1">得分: ${detail.score}</span>
+                            </div>
+                        </div>
+                        <p class="mb-1"><strong>题目:</strong> ${detail.question}</p>
+                        <p class="mb-1"><strong>您的答案:</strong> <span class="user-answer">${detail.userAnswer}</span></p>
+                        ${detail.isCorrect !== null ? `
+                            <p class="mb-0"><strong>正确答案:</strong> ${correctAnswerDisplay}</p>
+                        ` : `
+                            <p class="mb-0"><strong>参考答案:</strong> <span class="correct-answer">${detail.correctAnswer}</span></p>
+                            <small class="text-muted">*简答题需要老师手动批改</small>
+                        `}
+                    </div>
+                `;
+            });
+            
+            resultDetails.innerHTML = detailsHtml;
+        }
+
+        // 更新章节选项
+        function updateChapterOptions() {
+            const questionBank = getCurrentQuestionBank();
+            const chapters = [...new Set(questionBank.map(q => q.chapter))];
+            const select = document.getElementById('chapterRange');
+            select.innerHTML = '';
+            chapters.forEach(chapter => {
+                const option = document.createElement('option');
+                option.value = chapter;
+                option.textContent = chapter;
+                select.appendChild(option);
+            });
+        }
+
+        // 工具函数
+        function getTypeColor(type) {
+            const colors = {
+                '填空': 'bg-primary',
+                '判断': 'bg-success', 
+                '选择': 'bg-warning',
+                '简答': 'bg-info'
+            };
+            return colors[type] || 'bg-secondary';
+        }
+
+        function shuffle(array) {
+            return array.sort(() => Math.random() - 0.5);
+        }
+
+        function saveToLocalStorage() {
+            localStorage.setItem('allCourses', JSON.stringify(allCourses));
+        }
+
+        function exportPaper() {
+            const paperContent = document.getElementById('paperContent').innerHTML;
+            const windowContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>试卷</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; }
+                        @media print { 
+                            body { margin: 0; }
+                            h3 { text-align: center; }
+                        }
+                    </style>
+                </head>
+                <body>${paperContent}</body>
+                </html>
+            `;
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(windowContent);
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        function exportData() {
+            const dataStr = JSON.stringify(allCourses, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'all_courses_data.json';
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = e => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = event => {
+                    try {
+                        const importedData = JSON.parse(event.target.result);
+                        allCourses = importedData;
+                        saveToLocalStorage();
+                        initializeCourseSelector();
+                        if (currentCourse && allCourses[currentCourse]) {
+                            updateUIForCourse();
+                        }
+                        alert('数据导入成功！');
+                    } catch (error) {
+                        alert('文件格式错误！');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCourseSelector();
+            
+            // 实时收集答案
+            document.addEventListener('input', function() {
+                if (currentExam) collectAnswers();
+            });
+            
+            document.addEventListener('change', function() {
+                if (currentExam) collectAnswers();
+            });
+        });
+    </script>
+</body>
+</html>
